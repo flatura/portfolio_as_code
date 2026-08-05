@@ -1,0 +1,116 @@
+site_name: "John Smith - Portfolio as Code"
+site_url: https://example-user.github.io/portfolio-as-code/
+site_description: "Systems Analyst & Solution Designer portfolio — architecture case studies as code"
+repo_url: https://github.com/example-user/portfolio-as-code
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Dmitrii Morozov
+
+validation:
+  nav:
+    omitted_files: info
+  links:
+    not_found: warn
+
+theme:
+  name: material
+  language: en
+
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.tracking
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - i18n:
+      docs_structure: folder
+      fallback_to_default: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: ru
+          name: Русский
+          build: true
+          site_name: "Василий Иванов - Portfolio as Code"
+          nav:
+            - Главная: index.md
+            - Подход и услуги: services.md
+            - Простые проекты:
+                - Example Simple: projects/example-simple.md
+            - Комплексные проекты:
+                - Example Project:
+                    - projects/example-project/index.md
+                    - Архитектура и интеграции: projects/example-project/06-architecture-and-integrations.md
+                    - Решения, компромиссы и риски: projects/example-project/08-decisions-trade-offs-and-risks.md
+                    - Дорожная карта и демонстрация: projects/example-project/09-roadmap-and-demonstration.md
+                    - Всё вместе: projects/example-project/all-in-one.md
+                    - Архитектурное ревью: projects/example-project/architecture-review.md
+  - search
+  - minify:
+      minify_html: true
+  - include-markdown
+  - glightbox
+
+nav:
+  - Home: index.md
+  - Approach & Services: services.md
+  - Simple Projects:
+      - Example Simple: projects/example-simple.md
+  - Complex Projects:
+      - Example Project:
+          - projects/example-project/index.md
+          - Architecture and Integrations: projects/example-project/06-architecture-and-integrations.md
+          - Decisions, Trade-offs, and Risks: projects/example-project/08-decisions-trade-offs-and-risks.md
+          - Roadmap and Demonstration: projects/example-project/09-roadmap-and-demonstration.md
+          - All-in-one: projects/example-project/all-in-one.md
+          - Architecture review: projects/example-project/architecture-review.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid-custom
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra:
+  generator: false
+
+extra_javascript:
+  - javascripts/mermaid_icons.js
+
+extra_css:
+  - css/extra.css

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-label="Signal Relay — Pipeline status">
+  <rect width="960" height="540" fill="#eef2f6"/>
+  <rect x="24" y="24" width="912" height="56" rx="4" fill="#1e3a5f"/>
+  <text x="48" y="60" fill="#eef2f6" font-family="Georgia, serif" font-size="22">Signal Relay — Pipeline status</text>
+  <rect x="24" y="104" width="200" height="412" rx="4" fill="#d9e2ec"/>
+  <rect x="48" y="140" width="152" height="28" rx="2" fill="#1e3a5f"/>
+  <rect x="48" y="184" width="152" height="28" rx="2" fill="#9fb3c8"/>
+  <rect x="48" y="228" width="152" height="28" rx="2" fill="#9fb3c8"/>
+  <rect x="48" y="272" width="152" height="28" rx="2" fill="#9fb3c8"/>
+  <rect x="248" y="104" width="688" height="64" rx="4" fill="#fffdf8" stroke="#9fb3c8"/>
+  <text x="272" y="144" fill="#1e3a5f" font-family="Georgia, serif" font-size="18">Terraform stack · region us-east-1 · env pilot</text>
+  <rect x="248" y="184" width="688" height="332" rx="4" fill="#fffdf8" stroke="#9fb3c8"/>
+  <rect x="272" y="212" width="640" height="36" fill="#c5d4e3"/>
+  <text x="288" y="236" fill="#1e3a5f" font-family="Segoe UI, sans-serif" font-size="14">Field</text>
+  <text x="520" y="236" fill="#1e3a5f" font-family="Segoe UI, sans-serif" font-size="14">Value</text>
+  <text x="760" y="236" fill="#1e3a5f" font-family="Segoe UI, sans-serif" font-size="14">Status</text>
+  <rect x="272" y="260" width="640" height="40" fill="#fffdf8"/><text x="288" y="286" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">api-gateway</text><text x="520" y="286" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">ingest /v1/events</text><text x="760" y="286" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">healthy</text>
+  <rect x="272" y="300" width="640" height="40" fill="#f0f4f8"/><text x="288" y="326" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">lambda ingest/process</text><text x="520" y="326" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">errors 0.2%</text><text x="760" y="326" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">healthy</text>
+  <rect x="272" y="340" width="640" height="40" fill="#fffdf8"/><text x="288" y="366" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">sqs + dlq</text><text x="520" y="366" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">depth 3</text><text x="760" y="366" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">watch</text>
+  <rect x="272" y="380" width="640" height="40" fill="#f0f4f8"/><text x="288" y="406" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">eventbridge</text><text x="520" y="406" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">rules 6</text><text x="760" y="406" fill="#334155" font-family="Segoe UI, sans-serif" font-size="14">healthy</text>
+</svg>

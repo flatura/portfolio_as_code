@@ -1,0 +1,100 @@
+.mermaid {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  white-space: pre-wrap;
+  border: 1px solid #c00;
+  padding: 1rem;
+}
+
+/* Mermaid diagrams: readable neutral gray lines and labels (light) */
+
+.md-typeset .mermaid svg {
+  color: #444444;
+}
+
+/* Main connector lines */
+.md-typeset .mermaid svg .edgePath .path,
+.md-typeset .mermaid svg path.flowchart-link,
+.md-typeset .mermaid svg .flowchart-link {
+  stroke: #444444 !important;
+  stroke-width: 1.8px !important;
+}
+
+/* Arrow heads */
+.md-typeset .mermaid svg marker path,
+.md-typeset .mermaid svg defs marker path {
+  fill: #444444 !important;
+  stroke: #444444 !important;
+}
+
+/* General text */
+.md-typeset .mermaid svg text,
+.md-typeset .mermaid svg .label,
+.md-typeset .mermaid svg .nodeLabel,
+.md-typeset .mermaid svg .edgeLabel,
+.md-typeset .mermaid svg .cluster-label,
+.md-typeset .mermaid svg .messageText {
+  fill: #444444 !important;
+  color: #444444 !important;
+}
+
+/* Edge label background */
+.md-typeset .mermaid svg .edgeLabel,
+.md-typeset .mermaid svg .labelBkg {
+  background-color: #ffffff !important;
+}
+
+/* Edge label text inside foreignObject */
+.md-typeset .mermaid svg foreignObject,
+.md-typeset .mermaid svg foreignObject div,
+.md-typeset .mermaid svg foreignObject span {
+  color: #444444 !important;
+}
+
+/* Mermaid diagrams: readable light neutrals (dark / slate) */
+
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg {
+  color: #c9c9c9;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .edgePath .path,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg path.flowchart-link,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .flowchart-link {
+  stroke: #c9c9c9 !important;
+  stroke-width: 1.8px !important;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg marker path,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg defs marker path {
+  fill: #c9c9c9 !important;
+  stroke: #c9c9c9 !important;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg text,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .label,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .nodeLabel,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .edgeLabel,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .cluster-label,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .messageText {
+  fill: #c9c9c9 !important;
+  color: #c9c9c9 !important;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .edgeLabel,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg .labelBkg {
+  background-color: transparent !important;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg foreignObject,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg foreignObject div,
+[data-md-color-scheme="slate"] .md-typeset .mermaid svg foreignObject span {
+  color: #c9c9c9 !important;
+}
