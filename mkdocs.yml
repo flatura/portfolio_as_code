@@ -110,7 +110,7 @@ extra:
   generator: false
 
 extra_javascript:
-  - javascripts/mermaid_icons.js?v=2
+  - javascripts/mermaid_icons.js?v=3
 
 extra_css:
   - css/extra.css

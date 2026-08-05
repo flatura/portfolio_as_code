@@ -24,35 +24,8 @@
       siteBase.endsWith("/") ? siteBase : `${siteBase}/`,
       document.location.href
     ).href
-    // #region agent log
-    fetch("http://127.0.0.1:7255/ingest/a3feb566-e5c4-48e2-9e6a-623c00f794d0", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "ae0d78",
-      },
-      body: JSON.stringify({
-        sessionId: "ae0d78",
-        runId: "post-fix-v2",
-        hypothesisId: "E",
-        location: "mermaid_icons.js:base",
-        message: "icon pack base via __config",
-        data: {
-          page: location.href,
-          baseURI: document.baseURI,
-          siteBase,
-          base,
-          aws: new URL("assets/mermaid-icons/aws-icons.json", base).href,
-          logos: new URL("assets/mermaid-icons/logos.json", base).href,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion
-    console.info("[mermaid-icons] pack base", base)
     const load = async (path, label) => {
-      const url = new URL(path, base)
-      const res = await fetch(url)
+      const res = await fetch(new URL(path, base))
       if (!res.ok) throw new Error(`${label} failed: ${res.status} ${res.url}`)
       return res.json()
     }
