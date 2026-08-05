@@ -15,7 +15,38 @@
     )
     mermaidApi = mod.default ?? mod
 
-    const base = document.baseURI
+    // Resolve against the site root (script lives in javascripts/), not the
+    // current page URL — document.baseURI nests assets under /projects/...
+    const scriptSrc = [...document.getElementsByTagName("script")]
+      .map((s) => s.src)
+      .find((src) => src.includes("mermaid_icons.js"))
+    const base = scriptSrc
+      ? new URL("../", scriptSrc).href
+      : document.baseURI
+    // #region agent log
+    fetch("http://127.0.0.1:7255/ingest/a3feb566-e5c4-48e2-9e6a-623c00f794d0", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "ae0d78",
+      },
+      body: JSON.stringify({
+        sessionId: "ae0d78",
+        runId: "post-fix",
+        hypothesisId: "A",
+        location: "mermaid_icons.js:base",
+        message: "icon pack base resolution",
+        data: {
+          page: location.href,
+          baseURI: document.baseURI,
+          scriptSrc: scriptSrc || null,
+          base,
+          aws: new URL("assets/mermaid-icons/aws-icons.json", base).href,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion
     const load = async (path, label) => {
       const res = await fetch(new URL(path, base))
       if (!res.ok) throw new Error(`${label} failed: ${res.status} ${res.url}`)
