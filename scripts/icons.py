@@ -1,0 +1,888 @@
+"""Icon pack loader, normaliser, manifest and SVG preview generator.
+
+Canonical inputs:
+  docs/assets/mermaid-icons/{aws-icons,logos}.json
+  docs/assets/mermaid-icons/sources.json  (optional provenance sidecar)
+
+Generated output (this module):
+  reference/icons/manifest.json
+  reference/icons/previews/<collection>/*.svg
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Iterable, Sequence
+
+ROOT = Path(__file__).resolve().parents[1]
+
+SCHEMA_VERSION = 1
+GENERATOR = "scripts/icons.py"
+LIBRARY_DEFAULT = 16
+SOURCES_REL = "docs/assets/mermaid-icons/sources.json"
+MANIFEST_REL = "reference/icons/manifest.json"
+PREVIEWS_REL = "reference/icons/previews"
+
+# Bodies are Iconify SVG fragments; reject active content before writing previews.
+UNSAFE_BODY_RE = re.compile(
+    r"<script|<foreignObject|<!DOCTYPE|<!ENTITY|\bon[a-z]+\s*=",
+    re.IGNORECASE,
+)
+SVG_NS = "http://www.w3.org/2000/svg"
+XLINK_NS = "http://www.w3.org/1999/xlink"
+
+COLLECTION_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+STANDARD_KEY_RE = re.compile(r"^[a-z0-9-]+$")
+NON_FILENAME_RE = re.compile(r"[^a-z0-9-]+")
+RESERVED_STEMS = frozenset(
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *[f"com{i}" for i in range(1, 10)],
+        *[f"lpt{i}" for i in range(1, 10)],
+    }
+)
+ALIAS_TRANSFORM_KEYS = ("rotate", "hFlip", "vFlip")
+
+
+@dataclass(frozen=True)
+class CollectionSpec:
+    id: str
+    json_path: str  # repo-relative POSIX path
+    previews: bool = True  # set False to skip SVG emission (e.g. licensing gate)
+
+
+COLLECTIONS: tuple[CollectionSpec, ...] = (
+    CollectionSpec("aws", "docs/assets/mermaid-icons/aws-icons.json"),
+    CollectionSpec("logos", "docs/assets/mermaid-icons/logos.json"),
+)
+
+
+@dataclass(frozen=True)
+class PreviewJob:
+    """One standalone SVG preview to emit under ``reference/icons/previews/``."""
+
+    rel_path: str  # repo-relative POSIX path
+    slug: str
+    source_json: str
+    width: int | float
+    height: int | float
+    left: int | float
+    top: int | float
+    body: str
+
+
+@dataclass
+class RawIcon:
+    key: str
+    body: str | None = None
+    width: int | float | None = None
+    height: int | float | None = None
+    left: int | float | None = None
+    top: int | float | None = None
+    hidden: bool = False
+    is_alias: bool = False
+    alias_parent: str | None = None
+    skipped_transform: bool = False
+
+
+@dataclass
+class RawCollection:
+    id: str
+    prefix: str
+    source_json: str
+    name: str | None = None
+    upstream_version: str | None = None
+    snapshot: str | None = None
+    author: dict[str, Any] | None = None
+    license: dict[str, Any] | None = None
+    default_width: int | float | None = None
+    default_height: int | float | None = None
+    icons: dict[str, RawIcon] = field(default_factory=dict)
+    aliases: dict[str, RawIcon] = field(default_factory=dict)
+    categories: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class ResolvedDimensions:
+    width: int | float
+    height: int | float
+    left: int | float
+    top: int | float
+    dimensions_source: str | None  # None means fully from icon (omit in manifest)
+
+
+class IconValidationError(Exception):
+    """One or more validation problems; ``errors`` holds every message."""
+
+    def __init__(self, errors: Sequence[str]) -> None:
+        self.errors = list(errors)
+        super().__init__("\n".join(self.errors))
+
+
+def write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8", newline="\n")
+
+
+def write_if_changed(path: Path, content: str) -> bool:
+    """Write ``content`` only when it differs. Returns True if the file was written."""
+    normalized = content.replace("\r\n", "\n")
+    if path.is_file():
+        existing = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+        if existing == normalized:
+            return False
+    write_text(path, normalized)
+    return True
+
+
+def scan_svg_body(body: str, identity: str) -> list[str]:
+    """Return hard-error messages if ``body`` contains disallowed SVG content."""
+    if UNSAFE_BODY_RE.search(body):
+        return [
+            f"{identity}: SVG body failed safety scan "
+            "(script/foreignObject/DOCTYPE/ENTITY/on* attribute)"
+        ]
+    return []
+
+
+def render_preview_svg(job: PreviewJob) -> str:
+    """Render a deterministic standalone SVG preview (LF, UTF-8, no XML declaration)."""
+    w = format_number(job.width)
+    h = format_number(job.height)
+    vb = (
+        f"{format_number(job.left)} {format_number(job.top)} "
+        f"{format_number(job.width)} {format_number(job.height)}"
+    )
+    comment = (
+        f"<!-- Generated by {GENERATOR} from {job.source_json} ({job.slug}). Do not edit. -->"
+    )
+    # xmlns:xlink is required for Iconify bodies that use xlink:href on <use>.
+    return (
+        f"{comment}\n"
+        f'<svg xmlns="{SVG_NS}" xmlns:xlink="{XLINK_NS}" '
+        f'width="{w}" height="{h}" viewBox="{vb}">'
+        f"{job.body}"
+        f"</svg>\n"
+    )
+
+
+def validate_preview_svg(svg_text: str, identity: str) -> list[str]:
+    """Parse the wrapped document; root must be an ``svg`` element."""
+    try:
+        root = ET.fromstring(svg_text)
+    except ET.ParseError as exc:
+        return [f"{identity}: preview SVG is not well-formed: {exc}"]
+    tag = root.tag
+    local = tag.rsplit("}", 1)[-1] if isinstance(tag, str) else tag
+    if local != "svg":
+        return [f"{identity}: preview root element must be svg, got {tag!r}"]
+    return []
+
+
+def is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def format_number(value: int | float) -> str:
+    """Render viewBox/attr numbers without float noise (0 not 0.0; 31.4 not 31.400…002)."""
+    if not is_number(value):
+        raise TypeError(f"expected number, got {type(value).__name__}")
+    as_float = float(value)
+    if as_float.is_integer():
+        return repr(int(as_float))
+    # shortest round-trip that prefers decimal form over binary noise
+    text = format(as_float, ".15g")
+    return text
+
+
+def _cap_token(token: str) -> str:
+    """Uppercase the first alphabetic character (so ``6px`` → ``6Px``, ``ec2`` → ``Ec2``)."""
+    for i, ch in enumerate(token):
+        if ch.isalpha():
+            return token[:i] + ch.upper() + token[i + 1 :]
+    return token
+
+
+def humanize(key: str) -> str:
+    return " ".join(_cap_token(token) for token in key.split("-") if token)
+
+
+def filename_for(key: str) -> str:
+    if not isinstance(key, str):
+        raise ValueError(f"icon key must be a string, got {type(key).__name__}")
+    if key == "" or "/" in key or "\\" in key:
+        raise ValueError(f"invalid icon key for filename: {key!r}")
+
+    lower = key.lower()
+    dotted_head = lower.split(".", 1)[0]
+    if dotted_head in RESERVED_STEMS:
+        raise ValueError(f"icon key maps to reserved filename stem: {key!r}")
+
+    stem = NON_FILENAME_RE.sub("-", lower)
+    stem = re.sub(r"-{2,}", "-", stem).strip("-")
+    if stem in ("", ".", "..") or "/" in stem or "\\" in stem:
+        raise ValueError(f"icon key sanitises to empty or illegal filename: {key!r}")
+    if stem in RESERVED_STEMS:
+        raise ValueError(f"icon key maps to reserved filename stem: {key!r}")
+    return f"{stem}.svg"
+
+
+def resolve_dimensions(
+    icon: RawIcon,
+    collection_width: int | float | None,
+    collection_height: int | float | None,
+) -> ResolvedDimensions:
+    if icon.width is not None:
+        width: int | float = icon.width
+        w_src = "icon"
+    elif collection_width is not None:
+        width = collection_width
+        w_src = "collection"
+    else:
+        width = LIBRARY_DEFAULT
+        w_src = "library"
+
+    if icon.height is not None:
+        height: int | float = icon.height
+        h_src = "icon"
+    elif collection_height is not None:
+        height = collection_height
+        h_src = "collection"
+    else:
+        height = LIBRARY_DEFAULT
+        h_src = "library"
+
+    left: int | float = 0 if icon.left is None else icon.left
+    top: int | float = 0 if icon.top is None else icon.top
+
+    if w_src == "icon" and h_src == "icon":
+        dimensions_source: str | None = None
+    elif w_src == "collection" and h_src == "collection":
+        dimensions_source = "collection-default"
+    elif w_src == "library" and h_src == "library":
+        dimensions_source = "library-default"
+    else:
+        dimensions_source = "mixed"
+
+    return ResolvedDimensions(width, height, left, top, dimensions_source)
+
+
+def _validate_dim_field(
+    errors: list[str],
+    collection_id: str,
+    key: str,
+    field_name: str,
+    value: Any,
+    *,
+    positive: bool,
+) -> int | float | None:
+    if value is None:
+        return None
+    if not is_number(value):
+        errors.append(
+            f"{collection_id}:{key}: {field_name} must be a number, got {type(value).__name__}"
+        )
+        return None
+    if positive and value <= 0:
+        errors.append(f"{collection_id}:{key}: {field_name} must be > 0, got {value!r}")
+        return None
+    return value
+
+
+def _parse_icon_record(
+    collection_id: str,
+    key: str,
+    record: Any,
+    errors: list[str],
+) -> RawIcon | None:
+    if not isinstance(record, dict):
+        errors.append(f"{collection_id}:{key}: icon record must be an object")
+        return None
+
+    body = record.get("body")
+    if body is None or body == "" or not isinstance(body, str):
+        errors.append(f"{collection_id}:{key}: missing or non-string body")
+        # still collect other field errors
+        body_ok = False
+        body_val: str | None = None
+    else:
+        body_ok = True
+        body_val = body
+
+    width = _validate_dim_field(errors, collection_id, key, "width", record.get("width"), positive=True)
+    height = _validate_dim_field(errors, collection_id, key, "height", record.get("height"), positive=True)
+    left = _validate_dim_field(errors, collection_id, key, "left", record.get("left"), positive=False)
+    top = _validate_dim_field(errors, collection_id, key, "top", record.get("top"), positive=False)
+
+    hidden = bool(record.get("hidden", False))
+
+    if not body_ok:
+        return None
+    return RawIcon(
+        key=key,
+        body=body_val,
+        width=width,
+        height=height,
+        left=left,
+        top=top,
+        hidden=hidden,
+    )
+
+
+def _parse_alias_record(
+    collection_id: str,
+    key: str,
+    record: Any,
+    errors: list[str],
+    warnings_out: list[str],
+) -> RawIcon | None:
+    if not isinstance(record, dict):
+        errors.append(f"{collection_id}:{key}: alias record must be an object")
+        return None
+
+    parent = record.get("parent")
+    if not isinstance(parent, str) or not parent:
+        errors.append(f"{collection_id}:{key}: alias missing string parent")
+        return None
+
+    if any(k in record for k in ALIAS_TRANSFORM_KEYS):
+        warnings_out.append(
+            f"{collection_id}:{key}: alias has transform fields; skipped (not expanded)"
+        )
+        return RawIcon(key=key, is_alias=True, alias_parent=parent, skipped_transform=True)
+
+    return RawIcon(key=key, is_alias=True, alias_parent=parent)
+
+
+def load_collection(
+    path: Path,
+    collection_id: str,
+    *,
+    source_json: str | None = None,
+) -> tuple[RawCollection | None, list[str], list[str]]:
+    """Load and structurally validate one IconifyJSON file.
+
+    Returns ``(collection_or_None, errors, warnings)``.
+    """
+    errors: list[str] = []
+    warn: list[str] = []
+
+    if not COLLECTION_ID_RE.match(collection_id):
+        errors.append(f"invalid collection id: {collection_id!r}")
+        return None, errors, warn
+
+    rel = source_json or path.as_posix()
+    if not path.is_file():
+        errors.append(f"{collection_id}: source JSON not found: {rel}")
+        return None, errors, warn
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        errors.append(f"{collection_id}: invalid JSON in {rel}: {exc}")
+        return None, errors, warn
+
+    if not isinstance(data, dict):
+        errors.append(f"{collection_id}: top-level JSON must be an object")
+        return None, errors, warn
+
+    prefix = data.get("prefix")
+    if prefix != collection_id:
+        errors.append(
+            f"{collection_id}: prefix {prefix!r} does not match registry id {collection_id!r}"
+        )
+
+    icons_obj = data.get("icons")
+    if not isinstance(icons_obj, dict):
+        errors.append(f"{collection_id}: missing or non-object 'icons'")
+        icons_obj = {}
+
+    default_width = data.get("width")
+    default_height = data.get("height")
+    if default_width is not None and not is_number(default_width):
+        errors.append(f"{collection_id}: collection width must be a number")
+        default_width = None
+    elif default_width is not None and default_width <= 0:
+        errors.append(f"{collection_id}: collection width must be > 0")
+        default_width = None
+    if default_height is not None and not is_number(default_height):
+        errors.append(f"{collection_id}: collection height must be a number")
+        default_height = None
+    elif default_height is not None and default_height <= 0:
+        errors.append(f"{collection_id}: collection height must be > 0")
+        default_height = None
+
+    info = data.get("info") if isinstance(data.get("info"), dict) else {}
+    name = info.get("name") if isinstance(info.get("name"), str) else None
+    version = info.get("version")
+    upstream_version = version if isinstance(version, str) else None
+
+    author_raw = info.get("author") if isinstance(info.get("author"), dict) else None
+    author = None
+    if author_raw is not None:
+        author = {
+            "name": author_raw.get("name"),
+            "url": author_raw.get("url"),
+        }
+
+    license_raw = info.get("license") if isinstance(info.get("license"), dict) else None
+    license_info = None
+    if license_raw is not None:
+        license_info = {
+            "title": license_raw.get("title"),
+            "spdx": license_raw.get("spdx"),
+            "url": license_raw.get("url"),
+        }
+
+    snapshot = None
+    last_modified = data.get("lastModified")
+    if is_number(last_modified):
+        snapshot = datetime.fromtimestamp(float(last_modified), tz=timezone.utc).isoformat()
+
+    icons: dict[str, RawIcon] = {}
+    for key, record in icons_obj.items():
+        if not isinstance(key, str):
+            errors.append(f"{collection_id}: non-string icon key {key!r}")
+            continue
+        parsed = _parse_icon_record(collection_id, key, record, errors)
+        if parsed is not None:
+            icons[key] = parsed
+
+    aliases: dict[str, RawIcon] = {}
+    aliases_obj = data.get("aliases")
+    if aliases_obj is None:
+        aliases_obj = {}
+    elif not isinstance(aliases_obj, dict):
+        errors.append(f"{collection_id}: 'aliases' must be an object when present")
+        aliases_obj = {}
+
+    for key, record in aliases_obj.items():
+        if not isinstance(key, str):
+            errors.append(f"{collection_id}: non-string alias key {key!r}")
+            continue
+        if key in icons:
+            errors.append(f"{collection_id}:{key}: alias key collides with icon key")
+            continue
+        parsed_alias = _parse_alias_record(collection_id, key, record, errors, warn)
+        if parsed_alias is not None and not parsed_alias.skipped_transform:
+            aliases[key] = parsed_alias
+
+    categories: dict[str, list[str]] = {}
+    cats = data.get("categories")
+    if isinstance(cats, dict):
+        for cat_name, members in cats.items():
+            if isinstance(cat_name, str) and isinstance(members, list):
+                categories[cat_name] = [m for m in members if isinstance(m, str)]
+
+    if errors:
+        return None, errors, warn
+
+    return (
+        RawCollection(
+            id=collection_id,
+            prefix=str(prefix),
+            source_json=rel.replace("\\", "/"),
+            name=name,
+            upstream_version=upstream_version,
+            snapshot=snapshot,
+            author=author,
+            license=license_info,
+            default_width=default_width,
+            default_height=default_height,
+            icons=icons,
+            aliases=aliases,
+            categories=categories,
+        ),
+        errors,
+        warn,
+    )
+
+
+def load_sources(root: Path) -> tuple[dict[str, dict[str, Any]] | None, list[str]]:
+    """Load provenance sidecar. Missing file → ``(None, [warning])``."""
+    path = root / SOURCES_REL
+    if not path.is_file():
+        return None, [f"warning: {SOURCES_REL} missing; provenance will be null"]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return None, [f"warning: {SOURCES_REL} is invalid JSON ({exc}); provenance will be null"]
+    if not isinstance(data, dict):
+        return None, [f"warning: {SOURCES_REL} root must be an object; provenance will be null"]
+    out: dict[str, dict[str, Any]] = {}
+    for key, value in data.items():
+        if isinstance(key, str) and isinstance(value, dict):
+            out[key] = value
+    return out, []
+
+
+def _provenance_for(
+    collection_id: str,
+    sources: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any] | None:
+    if sources is None:
+        return None
+    entry = sources.get(collection_id)
+    if entry is None:
+        return None
+    return {
+        "obtained_from": entry.get("obtained_from"),
+        "retrieved": entry.get("retrieved"),
+        "notes": entry.get("notes"),
+    }
+
+
+def _icon_flags(key: str, filename: str) -> list[str]:
+    flags: list[str] = []
+    if not STANDARD_KEY_RE.match(key):
+        flags.append("nonstandard-key")
+    stem = filename[:-4] if filename.endswith(".svg") else filename
+    if stem != key.lower():
+        flags.append("filename-sanitized")
+    return flags
+
+
+def _manifest_icon_entry(
+    collection: RawCollection,
+    key: str,
+    icon: RawIcon,
+    *,
+    dims_icon: RawIcon,
+    alias_of: str | None = None,
+    source_kind: str = "icons",
+) -> dict[str, Any]:
+    dims = resolve_dimensions(dims_icon, collection.default_width, collection.default_height)
+    filename = filename_for(key)
+    name = humanize(key)
+    slug = f"{collection.id}:{key}"
+    preview = f"reference/icons/previews/{collection.id}/{filename}"
+    entry: dict[str, Any] = {
+        "collection": collection.id,
+        "key": key,
+        "slug": slug,
+        "name": name,
+        "width": dims.width,
+        "height": dims.height,
+        "left": dims.left,
+        "top": dims.top,
+    }
+    if dims.dimensions_source is not None:
+        entry["dimensions_source"] = dims.dimensions_source
+    entry["source"] = f"{collection.source_json}#/{source_kind}/{key}"
+    if alias_of is not None:
+        entry["alias_of"] = alias_of
+    if icon.hidden or dims_icon.hidden:
+        entry["hidden"] = True
+    entry["preview"] = preview
+    entry["usage"] = slug
+    entry["usage_example"] = f"service example({slug})[{name}]"
+    flags = _icon_flags(key, filename)
+    if flags:
+        entry["flags"] = flags
+    return entry
+
+
+def prepare_artifacts(
+    root: Path | None = None,
+    collections: Sequence[CollectionSpec] | None = None,
+) -> tuple[dict[str, Any], list[PreviewJob]]:
+    """Build the manifest and preview jobs. Raises ``IconValidationError`` on hard errors."""
+    root = ROOT if root is None else root
+    specs = COLLECTIONS if collections is None else tuple(collections)
+    spec_by_id = {s.id: s for s in specs}
+    errors: list[str] = []
+    warn: list[str] = []
+
+    sources, source_warnings = load_sources(root)
+    warn.extend(source_warnings)
+
+    loaded: list[RawCollection] = []
+    for spec in specs:
+        coll, coll_errors, coll_warnings = load_collection(
+            root / spec.json_path,
+            spec.id,
+            source_json=spec.json_path,
+        )
+        errors.extend(coll_errors)
+        warn.extend(coll_warnings)
+        if coll is not None:
+            loaded.append(coll)
+
+    if errors:
+        raise IconValidationError(errors)
+
+    collection_entries: list[dict[str, Any]] = []
+    icon_entries: list[dict[str, Any]] = []
+    preview_jobs: list[PreviewJob] = []
+    slugs: dict[str, str] = {}
+    previews: dict[str, str] = {}
+    filenames: dict[tuple[str, str], str] = {}
+
+    for coll in loaded:
+        emit_previews = spec_by_id[coll.id].previews
+        # (entry, body) — body is the Iconify fragment used for the SVG preview
+        expanded: list[tuple[dict[str, Any], str]] = []
+        for key, icon in coll.icons.items():
+            assert icon.body is not None
+            try:
+                entry = _manifest_icon_entry(coll, key, icon, dims_icon=icon)
+            except ValueError as exc:
+                errors.append(f"{coll.id}:{key}: {exc}")
+                continue
+            expanded.append((entry, icon.body))
+
+        for key, alias in coll.aliases.items():
+            parent_key = alias.alias_parent
+            assert parent_key is not None
+            parent = coll.icons.get(parent_key)
+            if parent is None:
+                errors.append(
+                    f"{coll.id}:{key}: alias parent {parent_key!r} not found in icons"
+                )
+                continue
+            assert parent.body is not None
+            try:
+                entry = _manifest_icon_entry(
+                    coll,
+                    key,
+                    alias,
+                    dims_icon=parent,
+                    alias_of=f"{coll.id}:{parent_key}",
+                    source_kind="aliases",
+                )
+            except ValueError as exc:
+                errors.append(f"{coll.id}:{key}: {exc}")
+                continue
+            expanded.append((entry, parent.body))
+
+        expanded.sort(key=lambda pair: pair[0]["key"])
+
+        for entry, body in expanded:
+            slug = entry["slug"]
+            preview = entry["preview"]
+            filename = Path(preview).name
+            identity = f"{entry['collection']}:{entry['key']}"
+
+            if slug in slugs:
+                errors.append(
+                    f"duplicate slug {slug!r}: {slugs[slug]} and {identity}"
+                )
+            else:
+                slugs[slug] = identity
+
+            if preview in previews:
+                errors.append(
+                    f"duplicate preview path {preview!r}: {previews[preview]} and {identity}"
+                )
+            else:
+                previews[preview] = identity
+
+            fil_key = (entry["collection"], filename)
+            if fil_key in filenames:
+                errors.append(
+                    f"duplicate filename {filename!r} in collection {entry['collection']!r}: "
+                    f"{filenames[fil_key]} and {identity}"
+                )
+            else:
+                filenames[fil_key] = identity
+
+            icon_entries.append(entry)
+
+            if emit_previews:
+                errors.extend(scan_svg_body(body, identity))
+                preview_jobs.append(
+                    PreviewJob(
+                        rel_path=preview,
+                        slug=slug,
+                        source_json=coll.source_json,
+                        width=entry["width"],
+                        height=entry["height"],
+                        left=entry["left"],
+                        top=entry["top"],
+                        body=body,
+                    )
+                )
+
+        collection_entries.append(
+            {
+                "id": coll.id,
+                "prefix": coll.prefix,
+                "name": coll.name,
+                "source_json": coll.source_json,
+                "upstream_version": coll.upstream_version,
+                "snapshot": coll.snapshot,
+                "author": coll.author,
+                "license": coll.license,
+                "provenance": _provenance_for(coll.id, sources),
+                "default_width": coll.default_width,
+                "default_height": coll.default_height,
+                "icon_count": len(expanded),
+            }
+        )
+
+    # stable order: registry order for collections; (collection index, key) for icons
+    coll_index = {c.id: i for i, c in enumerate(loaded)}
+    icon_entries.sort(key=lambda e: (coll_index[e["collection"]], e["key"]))
+    preview_jobs.sort(
+        key=lambda j: (coll_index[j.slug.split(":", 1)[0]], j.slug.split(":", 1)[1])
+    )
+
+    # Validate well-formedness of every preview before any write.
+    for job in preview_jobs:
+        svg_text = render_preview_svg(job)
+        # ElementTree rejects HTML comments before the root; strip the comment line.
+        xml_payload = svg_text.split("\n", 1)[1] if svg_text.startswith("<!--") else svg_text
+        errors.extend(validate_preview_svg(xml_payload, job.slug))
+
+    if errors:
+        raise IconValidationError(errors)
+
+    for message in warn:
+        print(message, file=sys.stderr)
+
+    return (
+        {
+            "schema_version": SCHEMA_VERSION,
+            "generator": GENERATOR,
+            "collections": collection_entries,
+            "icons": icon_entries,
+        },
+        preview_jobs,
+    )
+
+
+def build_manifest(
+    root: Path | None = None,
+    collections: Sequence[CollectionSpec] | None = None,
+) -> dict[str, Any]:
+    """Build the full manifest dict. Raises ``IconValidationError`` on hard errors."""
+    manifest, _ = prepare_artifacts(root=root, collections=collections)
+    return manifest
+
+
+def write_previews(
+    jobs: Sequence[PreviewJob],
+    root: Path | None = None,
+) -> tuple[int, int]:
+    """Write preview SVGs. Returns ``(written, unchanged)`` counts."""
+    root = ROOT if root is None else root
+    written = 0
+    unchanged = 0
+    for job in jobs:
+        content = render_preview_svg(job)
+        path = root / job.rel_path
+        if write_if_changed(path, content):
+            written += 1
+        else:
+            unchanged += 1
+    return written, unchanged
+
+
+def cleanup_stale_previews(
+    jobs: Sequence[PreviewJob],
+    root: Path | None = None,
+) -> list[str]:
+    """Delete preview files not in ``jobs``; remove empty collection dirs.
+
+    Never ``rmtree``s the previews root. Returns repo-relative POSIX paths removed.
+    """
+    root = ROOT if root is None else root
+    previews_root = root / PREVIEWS_REL
+    if not previews_root.is_dir():
+        return []
+
+    expected = {job.rel_path.replace("\\", "/") for job in jobs}
+    removed: list[str] = []
+
+    for path in sorted(previews_root.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel not in expected:
+            path.unlink()
+            removed.append(rel)
+
+    # Remove empty collection directories (deepest first).
+    for directory in sorted(
+        (p for p in previews_root.rglob("*") if p.is_dir()),
+        key=lambda p: len(p.parts),
+        reverse=True,
+    ):
+        try:
+            next(directory.iterdir())
+        except StopIteration:
+            directory.rmdir()
+
+    return removed
+
+
+def render_manifest_json(manifest: dict[str, Any]) -> str:
+    return json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+
+
+def write_manifest(
+    manifest: dict[str, Any],
+    root: Path | None = None,
+    path: Path | None = None,
+) -> Path:
+    root = ROOT if root is None else root
+    out = path if path is not None else root / MANIFEST_REL
+    write_text(out, render_manifest_json(manifest))
+    return out
+
+
+def generate(root: Path | None = None) -> tuple[dict[str, Any], dict[str, int]]:
+    """Write manifest and SVG previews; remove stale preview files.
+
+    Returns ``(manifest, stats)`` where stats has keys written/unchanged/removed/total.
+    """
+    root = ROOT if root is None else root
+    manifest, jobs = prepare_artifacts(root=root)
+    write_manifest(manifest, root=root)
+    written, unchanged = write_previews(jobs, root=root)
+    removed = cleanup_stale_previews(jobs, root=root)
+    stats = {
+        "written": written,
+        "unchanged": unchanged,
+        "removed": len(removed),
+        "total": len(jobs),
+    }
+    return manifest, stats
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate icon pack manifest and SVG previews."
+    )
+    parser.parse_args(list(argv) if argv is not None else None)
+    try:
+        manifest, stats = generate()
+    except IconValidationError as exc:
+        for line in exc.errors:
+            print(line, file=sys.stderr)
+        return 1
+    n_icons = len(manifest["icons"])
+    n_collections = len(manifest["collections"])
+    print(f"ok {MANIFEST_REL} ({n_collections} collections, {n_icons} icons)")
+    print(
+        f"ok {PREVIEWS_REL}/ "
+        f"({stats['total']} previews, "
+        f"{stats['written']} written, "
+        f"{stats['unchanged']} unchanged, "
+        f"{stats['removed']} removed)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
