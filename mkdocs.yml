@@ -14,6 +14,9 @@ validation:
 theme:
   name: material
   language: en
+  palette:
+    primary: blue grey
+    accent: teal
 
   features:
     - navigation.sections
