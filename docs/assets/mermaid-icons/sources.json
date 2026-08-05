@@ -1,0 +1,14 @@
+{
+  "aws": {
+    "obtained_from": "TODO-MAINTAINER",
+    "retrieved": "TODO-MAINTAINER",
+    "upstream_repo": "https://github.com/awslabs/aws-icons-for-plantuml",
+    "notes": "TODO-MAINTAINER"
+  },
+  "logos": {
+    "obtained_from": "TODO-MAINTAINER",
+    "retrieved": "TODO-MAINTAINER",
+    "upstream_repo": "https://github.com/gilbarbara/logos",
+    "notes": "TODO-MAINTAINER"
+  }
+}
