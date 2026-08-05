@@ -15,14 +15,15 @@
     )
     mermaidApi = mod.default ?? mod
 
-    // Resolve against the site root (script lives in javascripts/), not the
-    // current page URL — document.baseURI nests assets under /projects/...
-    const scriptSrc = [...document.getElementsByTagName("script")]
-      .map((s) => s.src)
-      .find((src) => src.includes("mermaid_icons.js"))
-    const base = scriptSrc
-      ? new URL("../", scriptSrc).href
-      : document.baseURI
+    // Material exposes the relative path to the site root for this page.
+    // Do not use document.baseURI alone — it is the page URL and nests
+    // assets under /projects/... on nested pages.
+    const siteBase =
+      JSON.parse(document.getElementById("__config").textContent).base || "."
+    const base = new URL(
+      siteBase.endsWith("/") ? siteBase : `${siteBase}/`,
+      document.location.href
+    ).href
     // #region agent log
     fetch("http://127.0.0.1:7255/ingest/a3feb566-e5c4-48e2-9e6a-623c00f794d0", {
       method: "POST",
@@ -32,23 +33,26 @@
       },
       body: JSON.stringify({
         sessionId: "ae0d78",
-        runId: "post-fix",
-        hypothesisId: "A",
+        runId: "post-fix-v2",
+        hypothesisId: "E",
         location: "mermaid_icons.js:base",
-        message: "icon pack base resolution",
+        message: "icon pack base via __config",
         data: {
           page: location.href,
           baseURI: document.baseURI,
-          scriptSrc: scriptSrc || null,
+          siteBase,
           base,
           aws: new URL("assets/mermaid-icons/aws-icons.json", base).href,
+          logos: new URL("assets/mermaid-icons/logos.json", base).href,
         },
         timestamp: Date.now(),
       }),
     }).catch(() => {})
     // #endregion
+    console.info("[mermaid-icons] pack base", base)
     const load = async (path, label) => {
-      const res = await fetch(new URL(path, base))
+      const url = new URL(path, base)
+      const res = await fetch(url)
       if (!res.ok) throw new Error(`${label} failed: ${res.status} ${res.url}`)
       return res.json()
     }
