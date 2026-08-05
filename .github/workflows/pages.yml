@@ -23,7 +23,7 @@ jobs:
       - name: Build site
         run: mkdocs build --strict --site-dir ./site
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ./site
   deploy:
@@ -35,4 +35,4 @@ jobs:
     steps:
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
