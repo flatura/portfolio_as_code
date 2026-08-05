@@ -14,9 +14,6 @@ validation:
 theme:
   name: material
   language: en
-  palette:
-    primary: blue grey
-    accent: teal
 
   features:
     - navigation.sections
@@ -32,16 +29,16 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: custom
-      accent: custom
+      primary: grey
+      accent: indigo
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
 
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: custom
-      accent: custom
+      primary: blue grey
+      accent: teal
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
