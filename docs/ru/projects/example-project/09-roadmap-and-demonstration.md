@@ -3,6 +3,6 @@
 Это дорожная карта и демонстрация.
 
 <figure markdown>
-![UI_1](/portfolio_as_code/projects/example-project/pipeline-status.svg)
+![UI_1](/portfolio_as_code/assets/example-project/pipeline-status.svg)
 <figcaption>Демонстрационный скриншот интерфейса</figcaption>
 </figure>
