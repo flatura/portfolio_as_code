@@ -11,10 +11,10 @@ The repository ships with a fictional demo persona and three demo projects, so a
 * Each complex project is a folder of nine compact sections (`01`–`09`) plus `summary.md`, an `index.md` landing page, and an ADR subtree.
 * `summary.md` is the single source of truth for status, role, stack, and value; every other page pulls it in via `mkdocs-include-markdown` rather than duplicating text.
 * Four **assembled pages** are generated per project from the same sections, so one edit propagates everywhere:
-  * `all-in-one.md` — the full case study on one page, for sequential reading or PDF export
-  * `architecture-review.md` — goals, system model, architecture, operations, decisions
-  * `srs-pack.md` — context through operations, in requirements-spec order
-  * `demo-pack.md` — overview, role, architecture, decisions, roadmap
+  * `all-in-one.md` - the full case study on one page, for sequential reading or PDF export
+  * `architecture-review.md` - goals, system model, architecture, operations, decisions
+  * `srs-pack.md` - context through operations, in requirements-spec order
+  * `demo-pack.md` - overview, role, architecture, decisions, roadmap
 * Simple projects can stay a single markdown file (see `docs/en/projects/example-simple.md`).
 * `scripts/portfolio.py assemblies --check` fails CI if a generated page drifts from its sources.
 
@@ -27,18 +27,23 @@ The repository ships with a fictional demo persona and three demo projects, so a
 
 ### AWS and vendor icon packs
 
-* `aws` and `logos` Iconify packs are vendored under `docs/assets/mermaid-icons/` and registered with `mermaid.registerIconPacks()` at startup for Mermaid `architecture-beta` diagrams. Vendoring keeps builds deterministic and offline for icon assets (no CDN/API fetch for the packs), works on restricted networks, and survives upstream key removal.
-* Icons are referenced as `aws:lambda`, `aws:dynamodb`, `aws:api-gateway`, `logos:docker`, and so on. `docs/en/projects/example-simple.md` is a worked example.
-* Packs are fetched relative to `document.baseURI`, so the site works from a user page, a project subpath, or `mkdocs serve`.
-* Browseable catalogue: [reference/icons/README.md](reference/icons/README.md) — contact sheets under `reference/icons/sheets/` (51 SVGs, 80 icons per full sheet), Markdown indexes, and `manifest.json`. `aws` is chunked by sorted key; `logos` is grouped by initial letter then chunked. There is no one-file-per-icon output (~2965 files vs 51); byte volume is essentially unchanged because every body still appears once.
-* Regenerate / validate:
+Two [Iconify](https://iconify.design/)-format packs are vendored under `docs/assets/mermaid-icons/` and registered with `mermaid.registerIconPacks()` at startup for Mermaid `architecture-beta` diagrams. Vendoring keeps builds deterministic and offline for icon assets (no CDN/API fetch for the packs), works on restricted networks, and survives upstream key removal.
 
-  ```bash
-  python scripts/portfolio.py icons generate
-  python scripts/portfolio.py icons check
-  ```
+* **AWS** (`aws`) — AWS Architecture Icons (~867), used as `aws:lambda`, `aws:dynamodb`, `aws:api-gateway`, and so on. Iconify-compatible JSON from [awslabs/aws-icons-for-plantuml](https://github.com/awslabs/aws-icons-for-plantuml) (not published as a browsable set on [icon-sets.iconify.design](https://icon-sets.iconify.design/) because of AWS NoDerivatives licensing). Local slug catalogue: [reference/icons/aws.md](reference/icons/aws.md).
+* **SVG Logos** (`logos`) — brand and tech logos (~2098), used as `logos:docker`, `logos:kubernetes`, and so on. Browse on Iconify: [SVG Logos](https://icon-sets.iconify.design/logos/). Local hub (letter indexes + sheets): [reference/icons/logos.md](reference/icons/logos.md).
 
-* The two packs are about 10 MB combined. If repository size matters more than coverage, trim `logos.json` to the icons you reference — the loader does not care how many entries the file holds.
+`docs/en/projects/example-simple.md` is a worked Mermaid example. Packs load relative to `document.baseURI`, so the site works from a user page, a project subpath, or `mkdocs serve`.
+
+Browseable catalogue overview: [reference/icons/README.md](reference/icons/README.md) — contact sheets under `reference/icons/sheets/` (51 SVGs, 80 icons per full sheet), Markdown indexes, and `manifest.json`. `aws` is chunked by sorted key; `logos` is grouped by initial letter then chunked. There is no one-file-per-icon output (~2965 files vs 51); byte volume is essentially unchanged because every body still appears once.
+
+Regenerate / validate:
+
+```bash
+python scripts/portfolio.py icons generate
+python scripts/portfolio.py icons check
+```
+
+The two packs are about 10 MB combined. If repository size matters more than coverage, trim `logos.json` to the icons you reference — the loader does not care how many entries the file holds.
 
 ### Bilingual by default (i18n)
 
@@ -63,20 +68,20 @@ The repository ships with a fictional demo persona and three demo projects, so a
 
 ## Stack
 
-* **Python 3.10+** — the generator scripts use modern type-hint syntax.
-* **[MkDocs](https://www.mkdocs.org/)** — static site generator.
-* **[Material for MkDocs](https://squidfunk.github.io/mkdocs-material/)** — theme, palette toggle, navigation, search.
-* **[Mermaid 11](https://mermaid.js.org/)** — diagrams, loaded from jsDelivr at runtime (not a Python dependency).
-* **[Iconify](https://iconify.design/) `aws` + `logos` packs** — vendored icon sets for `architecture-beta` diagrams.
+* **Python 3.10+** - the generator scripts use modern type-hint syntax.
+* **[MkDocs](https://www.mkdocs.org/)** - static site generator.
+* **[Material for MkDocs](https://squidfunk.github.io/mkdocs-material/)** - theme, palette toggle, navigation, search.
+* **[Mermaid 11](https://mermaid.js.org/)** - diagrams, loaded from jsDelivr at runtime (not a Python dependency).
+* **[Iconify](https://iconify.design/) `aws` + `logos` packs** - vendored icon sets for `architecture-beta` diagrams.
 
 Python packages, pinned in [`requirements.txt`](requirements.txt):
 
-* `mkdocs-material` — theme
-* `mkdocs-static-i18n[material]` — EN/RU locales and the language switcher
-* `mkdocs-include-markdown-plugin` — `summary.md` reuse and assembled pages
-* `pymdown-extensions` — superfences, tabbed content, details, inline highlighting
-* `mkdocs-glightbox` — image lightbox
-* `mkdocs-minify-plugin` — HTML minification
+* `mkdocs-material` - theme
+* `mkdocs-static-i18n[material]` - EN/RU locales and the language switcher
+* `mkdocs-include-markdown-plugin` - `summary.md` reuse and assembled pages
+* `pymdown-extensions` - superfences, tabbed content, details, inline highlighting
+* `mkdocs-glightbox` - image lightbox
+* `mkdocs-minify-plugin` - HTML minification
 
 ## Repository layout
 
@@ -151,18 +156,43 @@ flowchart LR
     Client --> API --> DB[(PostgreSQL)]
 ```
 ````
+Result:
+```mermaid
+flowchart LR
+    Client --> API --> DB[(PostgreSQL)]
+```
 
 To use the vendored icon packs, use an `architecture-beta` diagram and prefix icon names with the pack:
 
 ````markdown
 ```mermaid
 architecture-beta
-    group edge(aws:api-gateway)[Edge]
-    service apigw(aws:api-gateway)[API Gateway] in edge
-    service fn(aws:lambda)[Ingest Fn] in edge
+    group edge[Edge]
+    
+    service cognito[Auth] in edge
+    service apigw[API Gateway] in edge
+    service fn[Ingest Fn] in edge
+    service s3[Audio Storage] in edge
+    
+    cognito:R --> L:apigw
     apigw:R --> L:fn
+    fn:R --> L:s3
 ```
 ````
+Result:
+```mermaid
+architecture-beta
+    group edge[Edge]
+    
+    service cognito[Auth] in edge
+    service apigw[API Gateway] in edge
+    service fn[Ingest Fn] in edge
+    service s3[Audio Storage] in edge
+    
+    cognito:R --> L:apigw
+    apigw:R --> L:fn
+    fn:R --> L:s3
+```
 
 To add another pack, drop its Iconify JSON into `docs/assets/mermaid-icons/` and add an entry to the `registerIconPacks` call in `docs/javascripts/mermaid_icons.js`.
 
@@ -178,12 +208,12 @@ To go single-language instead, delete `docs/ru/`, drop the `i18n` plugin block f
 ## Deploying to GitHub Pages
 
 1. Push to `main` (or `master`).
-2. In the repo: **Settings → Pages → Source: GitHub Actions**.
+2. In the repo: **Settings -> Pages -> Source: GitHub Actions**.
 3. Workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) runs the assembly and icon drift checks, `mkdocs build --strict`, and deploys the `site/` artifact. [`.github/workflows/checks.yml`](.github/workflows/checks.yml) runs the same checks plus `pytest` on pull requests and pushes.
 
 Set `site_url` / `repo_url` in `mkdocs.yml` (or via `portfolio.py init`) to match your Pages URL, typically `https://<user>.github.io/<repo>/`.
 
 ## License
 
-* **Code and site content in this repository** — MIT; see [LICENSE](LICENSE).
-* **Third-party icon assets** (`docs/assets/mermaid-icons/`, generated sheets under `reference/icons/`) — separate upstream licenses (AWS icons: CC-BY-ND-2.0; logos: CC0-1.0). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). MIT does **not** cover those packs.
+* **Code and site content in this repository** - MIT; see [LICENSE](LICENSE).
+* **Third-party icon assets** (`docs/assets/mermaid-icons/`, generated sheets under `reference/icons/`) - separate upstream licenses (AWS icons: CC-BY-ND-2.0; logos: CC0-1.0). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). MIT does **not** cover those packs.
