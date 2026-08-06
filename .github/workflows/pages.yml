@@ -20,6 +20,8 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Check assembly drift
         run: python scripts/portfolio.py assemblies --check
+      - name: Check icon artifacts
+        run: python scripts/portfolio.py icons check
       - name: Build site
         run: mkdocs build --strict --site-dir ./site
       - name: Upload artifact

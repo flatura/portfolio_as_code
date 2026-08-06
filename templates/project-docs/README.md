@@ -47,7 +47,7 @@
       python scripts/portfolio.py assemblies --check
       ```
 
-   5. Register the project in `mkdocs.yml` nav (both EN and RU blocks). See the demo slugs `orchid-cloud` and `signal-relay` for full case-study nav entries, or `atlas-forecast` for a single-page entry.
+   5. Register the project in `mkdocs.yml` nav (both EN and RU blocks). See the demo slug `example-project` for a full case-study nav entry, or `example-simple` for a single-page entry.
 
    ## Compact section semantics
 
@@ -104,7 +104,7 @@
 
    EN headings get semantic anchors (`#overview`). RU Cyrillic headings get numeric fallbacks (`#_2`, `#_5`, …) because Python-Markdown slugify strips non-ASCII; the assembly tooling simulates the full assembled page so anchors match `mkdocs build`.
 
-   Validate: `mkdocs build --strict`. Spot-check mermaid fences and `<figure markdown>` on diagram- or screenshot-heavy projects (e.g. `signal-relay` for AWS icon packs).
+   Validate: `mkdocs build --strict`. Spot-check mermaid fences and `<figure markdown>` on diagram- or screenshot-heavy projects (e.g. `example-simple` for AWS/logo icon packs). Browseable icon catalogue: `reference/icons/`.
 
    Cross-module `.md` links inside compact sections resolve to standalone section pages when clicked from an assembly page; that is expected.
 

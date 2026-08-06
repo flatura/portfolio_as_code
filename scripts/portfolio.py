@@ -2,6 +2,7 @@
 
 Subcommands:
   assemblies [--check]   Regenerate all-in-one / packs / index link blocks
+  icons generate|check   Icon contact sheets, manifest, Markdown reference
   new-project <slug>     Copy project-docs templates and run assemblies
   init                   Replace demo name, site_url, and repo_url
 """
@@ -16,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from assembly_toc import SUMMARY, ALL_IN_ONE_MODULES, assert_include_leaves, contents_section
+from icons import cmd_check, cmd_generate
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
@@ -397,6 +399,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fail if committed assemblies differ from regenerated output",
     )
 
+    icons = sub.add_parser(
+        "icons",
+        help="Regenerate or verify icon contact sheets, manifest, and Markdown reference",
+    )
+    icons_sub = icons.add_subparsers(dest="icons_command", required=True)
+    icons_sub.add_parser(
+        "generate",
+        help="Regenerate manifest, SVG contact sheets, and Markdown reference",
+    )
+    icons_sub.add_parser(
+        "check",
+        help="Fail if committed icon artifacts drift or Markdown uses unknown slugs",
+    )
+
     new_project = sub.add_parser("new-project", help="Scaffold a project from templates")
     new_project.add_argument("slug", help="Project directory slug (e.g. orchid-cloud)")
 
@@ -413,6 +429,12 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "assemblies":
         return cmd_assemblies(check=args.check)
+    if args.command == "icons":
+        if args.icons_command == "generate":
+            return cmd_generate()
+        if args.icons_command == "check":
+            return cmd_check()
+        return 2
     if args.command == "new-project":
         return cmd_new_project(args.slug)
     if args.command == "init":

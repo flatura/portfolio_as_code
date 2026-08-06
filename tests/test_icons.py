@@ -13,17 +13,18 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from icons import (  # noqa: E402
     COLLECTIONS,
+    SCHEMA_VERSION,
     CollectionSpec,
     IconValidationError,
     RawIcon,
     build_manifest,
-    filename_for,
     format_number,
     humanize,
     load_collection,
     load_sources,
     render_manifest_json,
     resolve_dimensions,
+    validate_key,
     write_manifest,
 )
 
@@ -80,40 +81,43 @@ def test_humanize(key: str, expected: str) -> None:
     assert humanize(key) == expected
 
 
-# --- filename_for -------------------------------------------------------------
+# --- validate_key -------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("key", "expected"),
+    ("key", "flags"),
     [
-        ("redshift-query-editor-v2.0", "redshift-query-editor-v2-0.svg"),
-        ("ec2-aws-microservice-extractor-for-.net", "ec2-aws-microservice-extractor-for-net.svg"),
-        ("elemental-appliances-&-software", "elemental-appliances-software.svg"),
-        ("cloudfront", "cloudfront.svg"),
+        ("cloudfront", []),
+        ("redshift-query-editor-v2.0", ["nonstandard-key"]),
+        ("ec2-aws-microservice-extractor-for-.net", ["nonstandard-key"]),
+        ("elemental-appliances-&-software", ["nonstandard-key"]),
+        ("---", []),
+        ("con", []),
     ],
 )
-def test_filename_for_known_keys(key: str, expected: str) -> None:
-    assert filename_for(key) == expected
+def test_validate_key_flags(key: str, flags: list[str]) -> None:
+    assert validate_key(key) == flags
 
 
 @pytest.mark.parametrize(
     "key",
     [
+        "",
         "../evil",
         "evil/../x",
-        "con",
-        "nul.svg",
-        "---",
-        "",
-        "prn",
-        "aux",
-        "com1",
-        "lpt9",
+        "a/b",
+        "a\\b",
+        "has\x00null",
     ],
 )
-def test_filename_for_rejects(key: str) -> None:
+def test_validate_key_rejects(key: str) -> None:
     with pytest.raises(ValueError):
-        filename_for(key)
+        validate_key(key)
+
+
+def test_validate_key_rejects_non_string() -> None:
+    with pytest.raises(ValueError):
+        validate_key(None)  # type: ignore[arg-type]
 
 
 # --- format_number / resolve_dimensions --------------------------------------
@@ -279,7 +283,8 @@ def test_alias_key_collision_with_icon(tmp_path: Path) -> None:
 # --- collisions / sources / determinism ---------------------------------------
 
 
-def test_duplicate_filename_within_collection(tmp_path: Path) -> None:
+def test_nonstandard_keys_coexist_without_filename_collision(tmp_path: Path) -> None:
+    """Keys that once shared a sanitised stem are distinct sheet cells now."""
     root = tmp_path
     pack = root / "docs" / "assets" / "mermaid-icons" / "aws.json"
     _write_pack(
@@ -291,27 +296,13 @@ def test_duplicate_filename_within_collection(tmp_path: Path) -> None:
         },
     )
     specs = (CollectionSpec("aws", "docs/assets/mermaid-icons/aws.json"),)
-    with pytest.raises(IconValidationError) as exc:
-        build_manifest(root=root, collections=specs)
-    assert any("duplicate filename" in e for e in exc.value.errors)
-
-
-def test_duplicate_filename_reported_across_keys(tmp_path: Path) -> None:
-    """Same sanitised stem from two keys is a hard error naming both."""
-    root = tmp_path
-    pack = root / "a.json"
-    _write_pack(
-        pack,
-        prefix="a",
-        icons={
-            "x&y": {"body": "<path/>"},
-            "x-y": {"body": "<path/>"},
-        },
-    )
-    with pytest.raises(IconValidationError) as exc:
-        build_manifest(root=root, collections=(CollectionSpec("a", "a.json"),))
-    joined = " ".join(exc.value.errors)
-    assert "x&y" in joined and "x-y" in joined
+    manifest = build_manifest(root=root, collections=specs)
+    assert manifest["schema_version"] == SCHEMA_VERSION == 2
+    by_key = {i["key"]: i for i in manifest["icons"]}
+    assert by_key["foo.bar"]["flags"] == ["nonstandard-key"]
+    assert "flags" not in by_key["foo-bar"]
+    assert by_key["foo.bar"]["sheet"] == by_key["foo-bar"]["sheet"]
+    assert by_key["foo.bar"]["cell"] != by_key["foo-bar"]["cell"]
 
 
 def test_missing_sources_degrades_to_null(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -402,7 +393,7 @@ def test_hidden_flag_passthrough(tmp_path: Path) -> None:
     assert entry["name"] == "6Px"
 
 
-def test_nonstandard_key_flags(tmp_path: Path) -> None:
+def test_nonstandard_key_flags_and_sheet_coords(tmp_path: Path) -> None:
     pack = tmp_path / "docs" / "assets" / "mermaid-icons" / "aws.json"
     _write_pack(
         pack,
@@ -413,12 +404,23 @@ def test_nonstandard_key_flags(tmp_path: Path) -> None:
         root=tmp_path,
         collections=(CollectionSpec("aws", "docs/assets/mermaid-icons/aws.json"),),
     )
-    flags = manifest["icons"][0]["flags"]
-    assert flags == ["nonstandard-key", "filename-sanitized"]
-    assert manifest["icons"][0]["preview"].endswith("elemental-appliances-software.svg")
+    entry = manifest["icons"][0]
+    assert entry["flags"] == ["nonstandard-key"]
+    assert "preview" not in entry
+    assert entry["sheet"] == "reference/icons/sheets/aws-001.svg"
+    assert entry["sheet_index"] == 1
+    assert entry["row"] == 0
+    assert entry["column"] == 0
+    assert entry["cell"] == "r0c0"
+    assert manifest["schema_version"] == 2
+    assert manifest["collections"][0]["grouped_by_initial"] is False
+    assert len(manifest["collections"][0]["sheets"]) == 1
 
 
 def test_registry_order_and_ids() -> None:
     ids = [c.id for c in COLLECTIONS]
     assert ids == sorted(ids)
     assert ids == ["aws", "logos"]
+    assert COLLECTIONS[0].group_by_initial is False
+    assert COLLECTIONS[1].group_by_initial is True
+    assert SCHEMA_VERSION == 2

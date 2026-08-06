@@ -15,7 +15,7 @@ The repository ships with a fictional demo persona and three demo projects, so a
   * `architecture-review.md` — goals, system model, architecture, operations, decisions
   * `srs-pack.md` — context through operations, in requirements-spec order
   * `demo-pack.md` — overview, role, architecture, decisions, roadmap
-* Simple projects can stay a single markdown file (see `docs/en/projects/atlas-forecast.md`).
+* Simple projects can stay a single markdown file (see `docs/en/projects/example-simple.md`).
 * `scripts/portfolio.py assemblies --check` fails CI if a generated page drifts from its sources.
 
 ### Mermaid diagrams with enhanced visibility
@@ -27,10 +27,18 @@ The repository ships with a fictional demo persona and three demo projects, so a
 
 ### AWS and vendor icon packs
 
-* `aws` and `logos` Iconify packs are vendored under `docs/assets/mermaid-icons/` and registered with `mermaid.registerIconPacks()` at startup, which makes them available to Mermaid's `architecture-beta` diagrams.
-* Icons are referenced as `aws:lambda`, `aws:dynamodb`, `aws:api-gateway`, `logos:docker`, and so on. `docs/en/projects/signal-relay/06-architecture-and-integrations.md` is a worked example using API Gateway, Lambda, S3, DynamoDB, SQS, EventBridge, CloudWatch, and Cognito.
-* Packs are fetched relative to `document.baseURI`, so the site works unchanged whether it is served from a user page, a project subpath, or `mkdocs serve` on localhost.
-* The two packs are about 10 MB combined. If repository size matters more than icon coverage, trim `logos.json` to the icons you actually reference — the loader does not care how many entries the file holds.
+* `aws` and `logos` Iconify packs are vendored under `docs/assets/mermaid-icons/` and registered with `mermaid.registerIconPacks()` at startup for Mermaid `architecture-beta` diagrams. Vendoring keeps builds deterministic and offline for icon assets (no CDN/API fetch for the packs), works on restricted networks, and survives upstream key removal.
+* Icons are referenced as `aws:lambda`, `aws:dynamodb`, `aws:api-gateway`, `logos:docker`, and so on. `docs/en/projects/example-simple.md` is a worked example.
+* Packs are fetched relative to `document.baseURI`, so the site works from a user page, a project subpath, or `mkdocs serve`.
+* Browseable catalogue: [reference/icons/README.md](reference/icons/README.md) — contact sheets under `reference/icons/sheets/` (51 SVGs, 80 icons per full sheet), Markdown indexes, and `manifest.json`. `aws` is chunked by sorted key; `logos` is grouped by initial letter then chunked. There is no one-file-per-icon output (~2965 files vs 51); byte volume is essentially unchanged because every body still appears once.
+* Regenerate / validate:
+
+  ```bash
+  python scripts/portfolio.py icons generate
+  python scripts/portfolio.py icons check
+  ```
+
+* The two packs are about 10 MB combined. If repository size matters more than coverage, trim `logos.json` to the icons you reference — the loader does not care how many entries the file holds.
 
 ### Bilingual by default (i18n)
 
@@ -77,9 +85,12 @@ docs/
   assets/            # shared across locales: demo wireframes, mermaid icon packs
   css/  javascripts/ # diagram styling and the Mermaid loader
   en/  ru/           # one folder per locale: index.md, services.md, projects/
+reference/
+  icons/             # generated icon catalogue (sheets, indexes, manifest)
 scripts/
-  portfolio.py       # init, new-project, assemblies
+  portfolio.py       # init, new-project, assemblies, icons
   assembly_toc.py    # anchor-accurate contents generation
+  icons.py           # contact-sheet / manifest / Markdown generator
 templates/
   project-docs/      # blank EN/RU case-study skeleton copied by new-project
 mkdocs.yml
@@ -108,12 +119,13 @@ Open http://127.0.0.1:8000/. For a clean build:
 
 ```bash
 python scripts/portfolio.py assemblies --check
+python scripts/portfolio.py icons check
 mkdocs build --strict
 ```
 
 ## Adding a project
 
-Short entries can stay as a single page, e.g. `docs/en/projects/project4.md`.
+Short entries can stay as a single page, e.g. `docs/en/projects/example-simple.md`.
 
 For complex projects:
 
@@ -167,10 +179,11 @@ To go single-language instead, delete `docs/ru/`, drop the `i18n` plugin block f
 
 1. Push to `main` (or `master`).
 2. In the repo: **Settings → Pages → Source: GitHub Actions**.
-3. Workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) runs the assembly drift check, `mkdocs build --strict`, and deploys the `site/` artifact.
+3. Workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml) runs the assembly and icon drift checks, `mkdocs build --strict`, and deploys the `site/` artifact. [`.github/workflows/checks.yml`](.github/workflows/checks.yml) runs the same checks plus `pytest` on pull requests and pushes.
 
 Set `site_url` / `repo_url` in `mkdocs.yml` (or via `portfolio.py init`) to match your Pages URL, typically `https://<user>.github.io/<repo>/`.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+* **Code and site content in this repository** — MIT; see [LICENSE](LICENSE).
+* **Third-party icon assets** (`docs/assets/mermaid-icons/`, generated sheets under `reference/icons/`) — separate upstream licenses (AWS icons: CC-BY-ND-2.0; logos: CC0-1.0). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). MIT does **not** cover those packs.

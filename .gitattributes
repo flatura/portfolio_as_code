@@ -2,6 +2,7 @@
 *.svg text eol=lf
 *.md text eol=lf
 *.json text eol=lf
-reference/icons/previews/** linguist-generated=true
+reference/icons/sheets/** linguist-generated=true
 reference/icons/*.md linguist-generated=true
+reference/icons/**/*.md linguist-generated=true
 reference/icons/manifest.json linguist-generated=true

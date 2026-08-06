@@ -1,0 +1,21 @@
+name: Checks
+on:
+  pull_request:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - run: pip install -r requirements-dev.txt
+      - name: Check assembly drift
+        run: python scripts/portfolio.py assemblies --check
+      - name: Check icon artifacts
+        run: python scripts/portfolio.py icons check
+      - name: Run tests
+        run: python -m pytest
